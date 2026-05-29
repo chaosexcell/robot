@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>자석 블록 로봇 시뮬레이터</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f0ede8; display: flex; flex-direction: column; align-items: center; padding: 20px; font-family: sans-serif; min-height: 100vh; }
+h1 { font-size: 18px; font-weight: 500; color: #333; margin-bottom: 14px; }
+canvas { border-radius: 12px; display: block; border: 1px solid #ddd; }
+.panel {
+  width: 620px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  background: #fff;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  padding: 7px 16px 4px;
+  border-bottom: 1px solid #eee;
+  background: #f8f7f5;
+  letter-spacing: 0.04em;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 6px 12px 8px;
+}
+.row { display: flex; align-items: center; gap: 6px; padding: 4px; }
+.lbl { font-size: 11px; color: #777; width: 60px; flex-shrink: 0; line-height: 1.3; }
+.row input[type=range] { flex: 1; cursor: pointer; }
+.val { font-size: 11px; font-weight: 600; color: #333; width: 34px; text-align: right; flex-shrink: 0; }
+.btns { display: flex; gap: 8px; width: 620px; margin-top: 10px; }
+.btns button {
+  flex: 1; font-size: 13px; padding: 8px 0; cursor: pointer;
+  border-radius: 8px; border: 1px solid #ccc; background: #fff;
+  color: #333; transition: background 0.15s;
+}
+.btns button:hover { background: #f0ede8; }
+.btns button:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+<h1>자석 블록 로봇 시뮬레이터</h1>
+<canvas id="c" width="620" height="440"></canvas>
+
+<div class="panel">
+  <div class="section-title">머리</div>
+  <div class="grid">
+    <div class="row"><span class="lbl">머리 기울기</span><input type="range" id="sH" min="-30" max="30" value="0" step="1"><span class="val" id="vH">0°</span></div>
+    <div class="row"><span class="lbl">안테나</span><input type="range" id="sA" min="-25" max="25" value="0" step="1"><span class="val" id="vA">0°</span></div>
+  </div>
+
+  <div class="section-title">왼팔</div>
+  <div class="grid">
+    <div class="row"><span class="lbl">위/아래</span><input type="range" id="sLA" min="-120" max="40" value="-40" step="1"><span class="val" id="vLA">-40°</span></div>
+    <div class="row"><span class="lbl">팔꿈치</span><input type="range" id="sLE" min="-80" max="80" value="0" step="1"><span class="val" id="vLE">0°</span></div>
+  </div>
+
+  <div class="section-title">오른팔</div>
+  <div class="grid">
+    <div class="row"><span class="lbl">위/아래</span><input type="range" id="sRA" min="-120" max="40" value="-40" step="1"><span class="val" id="vRA">-40°</span></div>
+    <div class="row"><span class="lbl">팔꿈치</span><input type="range" id="sRE" min="-80" max="80" value="0" step="1"><span class="val" id="vRE">0°</span></div>
+  </div>
+
+  <div class="section-title">왼다리</div>
+  <div class="grid">
+    <div class="row"><span class="lbl">위/아래</span><input type="range" id="sLL" min="-40" max="40" value="0" step="1"><span class="val" id="vLL">0°</span></div>
+    <div class="row"><span class="lbl">무릎</span><input type="range" id="sLK" min="-70" max="10" value="0" step="1"><span class="val" id="vLK">0°</span></div>
+  </div>
+
+  <div class="section-title">오른다리</div>
+  <div class="grid">
+    <div class="row"><span class="lbl">위/아래</span><input type="range" id="sRL" min="-40" max="40" value="0" step="1"><span class="val" id="vRL">0°</span></div>
+    <div class="row"><span class="lbl">무릎</span><input type="range" id="sRK" min="-70" max="10" value="0" step="1"><span class="val" id="vRK">0°</span></div>
+  </div>
+</div>
+
+<div class="btns">
+  <button id="bWave">손 흔들기</button>
+  <button id="bDance">댄스</button>
+  <button id="bJump">점프</button>
+  <button id="bReset">초기화</button>
+</div>
+
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 620, H = 440;
+const st = { h:0, a:0, la:-40, le:0, ra:-40, re:0, ll:0, lk:0, rl:0, rk:0 };
+let animId = null;
+
+function d2r(d){ return d * Math.PI / 180; }
+
+function drawBg(){
+  ctx.fillStyle = '#F5A623';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function rod(x1,y1,x2,y2,col,w){
+  const dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
+  if(len<1) return;
+  ctx.save();
+  ctx.translate(x1,y1);
+  ctx.rotate(Math.atan2(dy,dx));
+  const r=w/2;
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.roundRect(0,-r,len,w,r); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.arc(0,0,r+1,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(len,0,r+1,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function poly(cx2,cy2,n,r,rot,col,lw){
+  ctx.save();
+  ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const a=d2r(rot)+i*Math.PI*2/n;
+    i===0 ? ctx.moveTo(cx2+r*Math.cos(a), cy2+r*Math.sin(a))
+           : ctx.lineTo(cx2+r*Math.cos(a), cy2+r*Math.sin(a));
+  }
+  ctx.closePath(); ctx.stroke(); ctx.restore();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawBg();
+
+  const bx = W/2;
+  const headR = 46;
+  const neckLen = 20;
+  const bw = 68, bh = 68;
+  const headCY = 118;
+  const bodyTop = headCY + headR + neckLen;
+  const bodyBotY = bodyTop + bh;
+
+  ctx.save();
+  ctx.translate(bx, bodyBotY);
+  ctx.save();
+  ctx.translate(-18, 0);
+  ctx.rotate(d2r(st.ll));
+  rod(0,0,0,50,'#3B6D11',7);
+  ctx.translate(0,50);
+  ctx.rotate(d2r(st.lk));
+  rod(0,0,0,50,'#639922',7);
+  poly(0,50,7,16,90,'#7F77DD',5);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(18, 0);
+  ctx.rotate(d2r(st.rl));
+  rod(0,0,0,50,'#D4537E',7);
+  ctx.translate(0,50);
+  ctx.rotate(d2r(st.rk));
+  rod(0,0,0,50,'#993556',7);
+  poly(0,50,6,15,0,'#378ADD',5);
+  ctx.restore();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(bx, bodyTop + bh/2);
+  ctx.strokeStyle='#534AB7'; ctx.lineWidth=7;
+  ctx.strokeRect(-bw/2,-bh/2,bw,bh);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(bx, bodyTop + 16);
+  ctx.save();
+  ctx.translate(-bw/2 - 2, 0);
+  ctx.rotate(d2r(st.la));
+  rod(0,0,0,46,'#D4537E',7);
+  ctx.translate(0,46);
+  ctx.rotate(d2r(st.le));
+  rod(0,0,0,44,'#993556',7);
+  poly(0,44,3,15,-90,'#FF9800',5);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(bw/2 + 2, 0);
+  ctx.rotate(d2r(st.ra));
+  rod(0,0,0,46,'#378ADD',7);
+  ctx.translate(0,46);
+  ctx.rotate(d2r(st.re));
+  rod(0,0,0,44,'#185FA5',7);
+  poly(0,44,5,15,-90,'#3B6D11',5);
+  ctx.restore();
+  ctx.restore();
+
+  rod(bx, bodyTop, bx, headCY + headR, '#D4537E', 6);
+
+  ctx.save();
+  ctx.translate(bx, headCY);
+  ctx.rotate(d2r(st.h));
+  poly(0,0,8,headR,-90,'#378ADD',7);
+  ctx.save();
+  ctx.rotate(d2r(st.a));
+  rod(0,-headR,0,-headR-28,'#D4537E',5);
+  ctx.fillStyle='#FFD700';
+  ctx.beginPath(); ctx.arc(0,-headR-32,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#FF8C00';
+  ctx.beginPath(); ctx.arc(0,-headR-32,5,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+  rod(-headR,0,-headR-14,0,'#3CB371',7);
+  rod( headR,0, headR+14,0,'#D4537E',7);
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.arc(-15,-6,9,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 15,-6,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(-12,-9,3.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 18,-9,3.5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#FFB6C1';
+  ctx.beginPath(); ctx.arc(-23,8,6,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 23,8,6,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#111'; ctx.lineWidth=2.5; ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(0,12,10,0,Math.PI); ctx.stroke();
+  ctx.restore();
+}
+
+const sliders=[
+  ['sH','vH','h'],['sA','vA','a'],
+  ['sLA','vLA','la'],['sLE','vLE','le'],
+  ['sRA','vRA','ra'],['sRE','vRE','re'],
+  ['sLL','vLL','ll'],['sLK','vLK','lk'],
+  ['sRL','vRL','rl'],['sRK','vRK','rk']
+];
+
+function syncUI(){
+  sliders.forEach(([sid,vid,key])=>{
+    document.getElementById(sid).value=Math.round(st[key]);
+    document.getElementById(vid).textContent=Math.round(st[key])+'°';
+  });
+}
+
+sliders.forEach(([sid,vid,key])=>{
+  document.getElementById(sid).addEventListener('input',e=>{
+    st[key]=+e.target.value;
+    document.getElementById(vid).textContent=Math.round(st[key])+'°';
+    draw();
+  });
+});
+
+function stopAnim(){ if(animId){ cancelAnimationFrame(animId); animId=null; } }
+
+document.getElementById('bReset').addEventListener('click',()=>{
+  stopAnim();
+  Object.assign(st,{h:0,a:0,la:-40,le:0,ra:-40,re:0,ll:0,lk:0,rl:0,rk:0});
+  syncUI(); draw();
+});
+
+document.getElementById('bWave').addEventListener('click',()=>{
+  stopAnim();
+  let t=0;
+  function tick(){
+    t+=0.1;
+    st.ra=-80+Math.sin(t*3)*60;
+    st.re=Math.sin(t*3+1)*40;
+    st.h=Math.sin(t*1.5)*12;
+    st.a=Math.sin(t*2.5)*20;
+    syncUI(); draw();
+    if(t<9) animId=requestAnimationFrame(tick);
+    else stopAnim();
+  }
+  animId=requestAnimationFrame(tick);
+});
+
+document.getElementById('bDance').addEventListener('click',()=>{
+  stopAnim();
+  let t=0;
+  function tick(){
+    t+=0.07;
+    st.la=-40+Math.sin(t*2)*65;
+    st.le=Math.sin(t*2+1)*50;
+    st.ra=-40-Math.sin(t*2)*65;
+    st.re=-Math.sin(t*2+1)*50;
+    st.ll=Math.sin(t*2)*35;
+    st.lk=-Math.abs(Math.sin(t*2))*45;
+    st.rl=-Math.sin(t*2)*35;
+    st.rk=-Math.abs(Math.cos(t*2))*45;
+    st.h=Math.sin(t*3)*18;
+    st.a=Math.sin(t*4)*22;
+    syncUI(); draw();
+    if(t<14) animId=requestAnimationFrame(tick);
+    else stopAnim();
+  }
+  animId=requestAnimationFrame(tick);
+});
+
+document.getElementById('bJump').addEventListener('click',()=>{
+  stopAnim();
+  let t=0;
+  function tick(){
+    t+=0.08;
+    const jump=Math.max(0,Math.sin(t%Math.PI))*35;
+    cv.style.transform=`translateY(${-jump}px)`;
+    st.la=-60-Math.abs(Math.sin(t))*30;
+    st.ra=-60-Math.abs(Math.sin(t))*30;
+    st.le=Math.sin(t)*30;
+    st.re=Math.sin(t)*30;
+    st.ll=-Math.abs(Math.sin(t))*35;
+    st.rl=-Math.abs(Math.sin(t))*35;
+    st.lk=Math.sin(t)*20;
+    st.rk=Math.sin(t)*20;
+    st.h=Math.sin(t*1.5)*8;
+    syncUI(); draw();
+    if(t<10) animId=requestAnimationFrame(tick);
+    else { cv.style.transform=''; stopAnim(); }
+  }
+  animId=requestAnimationFrame(tick);
+});
+
+draw();
+</script>
+</body>
+</html>
